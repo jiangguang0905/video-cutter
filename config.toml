@@ -1,0 +1,30 @@
+# movie-cut-own 运行配置
+# 所有可调参数集中于此，代码中不硬编码
+
+[server]
+host = "0.0.0.0"          # 监听地址，0.0.0.0 表示所有网卡
+port = 8765               # 服务端口
+print_host = "127.0.0.1"  # 控制台打印给用户点击的访问地址
+open_browser = true       # 启动后是否自动打开浏览器
+
+[ffmpeg]
+ffmpeg_bin = "ffmpeg"             # ffmpeg 可执行文件名或绝对路径
+ffprobe_bin = "ffprobe"           # ffprobe 可执行文件名或绝对路径
+avoid_negative_ts = "make_zero"   # 分段时间戳修正策略
+map = "0"                         # 流映射选择，0 表示复制全部流(含所有音轨/字幕)
+log_lines = 8                     # 每步 ffmpeg 在页面显示的输出行数
+log_encoding = "utf-8"            # ffmpeg 输出解码编码，中文路径乱码时可改为 gbk
+
+[paths]
+web_dir = "web"
+index_file = "index.html"
+backup_dir = "backup"     # 上传源文件与分段等中间产物目录
+output_suffix = "_cut"    # 输出文件名后缀
+
+[io]
+chunk_bytes = 1048576     # 上传与流式传输的分块大小（字节）
+default_filename = "video.mp4"
+
+[cut]
+min_segment_sec = 0.1     # 短于该时长的标记视为无效
+min_keep_sec = 0.5        # 短于该时长的保留段直接丢弃，避免空段进入concat导致音轨丢失

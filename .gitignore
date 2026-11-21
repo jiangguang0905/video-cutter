@@ -1,0 +1,21 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# IDE
+.idea/
+.vscode/
+
+# 运行时中间产物与视频文件
+backup/
+*.mp4
+*.mkv
+*.mov
+*.avi
+*.flv
+*.wmv
+
+# 工作区数据
+.workbuddy/

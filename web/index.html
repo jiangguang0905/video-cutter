@@ -1,0 +1,273 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>无损视频裁剪</title>
+<style>
+:root{--bg:#f5f5f4;--card:#fff;--line:#e3e2de;--ink:#2c2c2a;--sub:#77746e;--red:#a32d2d;--redbg:#fceaea;--green:#0f6e56;--blue:#185fa5}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:-apple-system,"Segoe UI","Microsoft YaHei",sans-serif;background:var(--bg);color:var(--ink);line-height:1.6;padding:24px}
+.wrap{max-width:920px;margin:0 auto}
+h1{font-size:19px;font-weight:600;margin-bottom:4px}
+.desc{font-size:13px;color:var(--sub);margin-bottom:20px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:18px;margin-bottom:16px}
+.hidden{display:none}
+.drop{border:2px dashed var(--line);border-radius:12px;padding:56px 20px;text-align:center;cursor:pointer;transition:.15s;background:#fbfaf8}
+.drop:hover,.drop.over{border-color:var(--blue);background:#f0f5fb}
+.drop .big{font-size:15px;margin-bottom:6px}
+.drop .small{font-size:13px;color:var(--sub)}
+.drop .choose{display:inline-block;margin-top:14px;padding:8px 16px;border:1px solid var(--blue);color:var(--blue);border-radius:8px;font-size:13px}
+.filebar{display:flex;align-items:center;gap:10px;margin-bottom:12px;font-size:13px}
+.filebar .name{font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.filebar button{margin-left:auto}
+video{width:100%;border-radius:8px;background:#000;display:block}
+.controls{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-top:14px}
+button{font-family:inherit;font-size:13px;padding:8px 14px;border:1px solid var(--line);border-radius:8px;background:#fff;color:var(--ink);cursor:pointer}
+button:hover{background:#f0efec}
+button.primary{background:var(--blue);color:#fff;border-color:var(--blue)}
+button.primary:hover{opacity:.9}
+button.danger{color:var(--red);border-color:#f0c9c9}
+button:disabled{opacity:.45;cursor:not-allowed}
+.t{margin-left:auto;font-variant-numeric:tabular-nums;font-size:14px;color:var(--sub)}
+.t b{color:var(--ink)}
+.timeline{position:relative;height:38px;margin-top:16px;border-radius:6px;background:#efece6;overflow:hidden;cursor:crosshair}
+.seg{position:absolute;top:0;bottom:0;background:repeating-linear-gradient(45deg,rgba(163,45,45,.55),rgba(163,45,45,.55) 6px,rgba(163,45,45,.35) 6px,rgba(163,45,45,.35) 12px);border-left:1px solid var(--red);border-right:1px solid var(--red)}
+.pending{position:absolute;top:0;bottom:0;background:rgba(24,95,165,.28);border-left:2px dashed var(--blue);border-right:2px dashed var(--blue)}
+.cur{position:absolute;top:0;bottom:0;width:2px;background:var(--ink);pointer-events:none}
+.hint{font-size:12px;color:var(--sub);margin-top:8px}
+.list{display:flex;flex-direction:column;gap:8px;margin-top:4px}
+.item{display:flex;align-items:center;gap:10px;padding:10px 12px;border:1px solid var(--line);border-radius:8px;font-size:13px}
+.item.empty{color:var(--sub);justify-content:center;border-style:dashed}
+.item input{width:80px;font-family:inherit;font-size:13px;padding:4px 6px;border:1px solid var(--line);border-radius:6px;text-align:center}
+.item .idx{width:22px;height:22px;flex:none;border-radius:50%;background:var(--redbg);color:var(--red);display:flex;align-items:center;justify-content:center;font-size:12px}
+.item .dur{margin-left:auto;color:var(--sub);font-variant-numeric:tabular-nums}
+.status{margin-top:12px;font-size:13px;min-height:20px}
+.status.ok{color:var(--green)}
+.status.err{color:var(--red)}
+.logbox{margin-top:12px;background:#1e1e1e;color:#d4d4d4;border-radius:8px;padding:12px;font-family:ui-monospace,Consolas,monospace;font-size:12px;line-height:1.5;height:200px;overflow-y:auto;white-space:pre-wrap;word-break:break-all;display:none}
+.logbox .cmd{color:#4ec9b0}
+.logbox.on{display:block}
+.kbd{font-family:ui-monospace,monospace;background:#efece6;border:1px solid var(--line);border-radius:4px;padding:1px 5px;font-size:11px}
+</style>
+</head>
+<body>
+<div class="wrap">
+<h1>无损视频裁剪</h1>
+<p class="desc">打开或拖入本地视频，边看边标记要删除的片段；导出时按关键帧无损剪切并拼接，画质零损失。切点会就近吸附到关键帧，可能存在几秒误差。</p>
+
+<div class="card" id="picker">
+<div class="drop" id="drop">
+<div class="big">把视频拖到这里</div>
+<div class="small">或者点击下方按钮从本地选择，视频只在导出时上传</div>
+<div class="choose">选择视频文件</div>
+</div>
+<input type="file" id="file" accept="video/*" hidden>
+</div>
+
+<div id="editor" class="hidden">
+<div class="card">
+<div class="filebar"><span class="name" id="fname"></span><button id="change">更换视频</button></div>
+<video id="v" controls preload="auto"></video>
+<div class="controls">
+<button id="markIn">标记起点 <span class="kbd">I</span></button>
+<button id="markOut">标记终点 <span class="kbd">O</span></button>
+<button id="undo" class="danger">撤销</button>
+<button id="clear" class="danger">清空</button>
+<span class="t"><b id="cur">0:00</b> / <span id="dur">--:--</span></span>
+</div>
+<div class="timeline" id="timeline"></div>
+<p class="hint">点击时间轴可跳转播放位置。先按 <span class="kbd">I</span> 标记起点，播放到要删除片段的末尾再按 <span class="kbd">O</span> 标记终点；可标记多段，下方列表可微调时间或删除。</p>
+</div>
+
+<div class="card">
+<h1 style="font-size:14px;margin-bottom:10px">待删除片段 <span id="autosave" style="font-size:11px;font-weight:400;color:var(--green);margin-left:8px"></span></h1>
+<div class="list" id="list"></div>
+<div class="controls">
+<button class="primary" id="run">执行无损裁剪</button>
+</div>
+<div class="status" id="status"></div>
+<div class="logbox" id="logbox"></div>
+</div>
+</div>
+</div>
+
+<script>
+const v=document.getElementById('v');
+const drop=document.getElementById('drop');
+const fileInput=document.getElementById('file');
+let cuts=[];
+let pending=null;
+let duration=0;
+let currentFile=null;
+let objectUrl=null;
+
+const fmt=s=>{s=Math.max(0,s);const m=Math.floor(s/60),sec=Math.floor(s%60);return m+':'+String(sec).padStart(2,'0')};
+
+const cacheKey=()=>currentFile?('mc:'+currentFile.name+':'+currentFile.size):null;
+function saveCuts(){
+  const k=cacheKey();
+  if(!k)return;
+  localStorage.setItem(k,JSON.stringify({cuts,duration}));
+  const tag=document.getElementById('autosave');
+  tag.textContent='已自动保存';
+}
+function loadCuts(){
+  const k=cacheKey();
+  if(!k)return false;
+  const raw=localStorage.getItem(k);
+  if(!raw)return false;
+  const saved=JSON.parse(raw);
+  cuts=saved.cuts||[];
+  duration=saved.duration||0;
+  return cuts.length>0;
+}
+
+function loadFile(file){
+  currentFile=file;
+  pending=null;
+  const restored=loadCuts();
+  if(!restored){cuts=[];duration=0}
+  if(objectUrl)URL.revokeObjectURL(objectUrl);
+  objectUrl=URL.createObjectURL(file);
+  document.getElementById('fname').textContent=file.name;
+  document.getElementById('autosave').textContent='';
+  document.getElementById('picker').classList.add('hidden');
+  document.getElementById('editor').classList.remove('hidden');
+  v.src=objectUrl;
+  setStatus(restored?'已恢复上次标记的 '+cuts.length+' 个片段':'');
+  render();
+}
+function resetFile(){
+  v.pause();v.removeAttribute('src');v.load();
+  if(objectUrl)URL.revokeObjectURL(objectUrl);
+  objectUrl=null;currentFile=null;cuts=[];pending=null;duration=0;
+  document.getElementById('editor').classList.add('hidden');
+  document.getElementById('picker').classList.remove('hidden');
+  document.getElementById('dur').textContent='--:--';
+}
+
+fileInput.onchange=e=>{if(e.target.files[0])loadFile(e.target.files[0]);e.target.value=''};
+drop.onclick=()=>fileInput.click();
+drop.ondragover=e=>{e.preventDefault();drop.classList.add('over')};
+drop.ondragleave=e=>{e.preventDefault();drop.classList.remove('over')};
+drop.ondrop=e=>{e.preventDefault();drop.classList.remove('over');const f=e.dataTransfer.files[0];if(f)loadFile(f)};
+document.getElementById('change').onclick=resetFile;
+
+v.onloadedmetadata=()=>{duration=v.duration;document.getElementById('dur').textContent=fmt(duration);render()};
+v.addEventListener('timeupdate',()=>{document.getElementById('cur').textContent=fmt(v.currentTime);renderTimeline()});
+
+document.getElementById('timeline').addEventListener('click',e=>{
+  const r=e.currentTarget.getBoundingClientRect();
+  v.currentTime=(e.clientX-r.left)/r.width*duration;
+});
+
+function markIn(){pending=v.currentTime;renderTimeline();setStatus('已标记起点 '+fmt(pending)+'，播放到片段末尾后标记终点')}
+function markOut(){
+  if(pending===null){setStatus('请先标记起点','err');return}
+  const s=Math.min(pending,v.currentTime),e=Math.max(pending,v.currentTime);
+  if(e-s<0.1){setStatus('片段过短，请重新标记','err');return}
+  cuts.push([s,e]);cuts.sort((a,b)=>a[0]-b[0]);pending=null;render();setStatus('')
+}
+function undo(){cuts.pop();render();setStatus('')}
+function clear(){cuts=[];pending=null;render();setStatus('')}
+
+function editTime(i,which,val){
+  const t=parseFloat(val);if(isNaN(t))return;
+  cuts[i][which]=t;cuts.sort((a,b)=>a[0]-b[0]);render()
+}
+function delCut(i){cuts.splice(i,1);render()}
+
+function render(){
+  const list=document.getElementById('list');
+  if(cuts.length===0){list.innerHTML='<div class="item empty">尚未标记删除片段</div>'}
+  else{
+    list.innerHTML=cuts.map((c,i)=>
+      '<div class="item">'+
+      '<span class="idx">'+(i+1)+'</span>'+
+      '<input type="number" step="0.1" value="'+c[0].toFixed(1)+'" onchange="editTime('+i+',0,this.value)">'+
+      '<span class="arw">至</span>'+
+      '<input type="number" step="0.1" value="'+c[1].toFixed(1)+'" onchange="editTime('+i+',1,this.value)">'+
+      '<span class="dur">删除 '+(c[1]-c[0]).toFixed(1)+' 秒</span>'+
+      '<button class="danger" onclick="delCut('+i+')">移除</button>'+
+      '</div>').join('');
+  }
+  renderTimeline();
+  saveCuts()
+}
+
+function renderTimeline(){
+  const tl=document.getElementById('timeline');
+  if(!duration)return;
+  const segs=cuts.map(c=>'<div class="seg" style="left:'+(c[0]/duration*100)+'%;width:'+((c[1]-c[0])/duration*100)+'%"></div>').join('');
+  const pend=pending!==null?'<div class="pending" style="left:'+(Math.min(pending,v.currentTime)/duration*100)+'%;width:'+(Math.abs(v.currentTime-pending)/duration*100)+'%"></div>':'';
+  const cur='<div class="cur" style="left:'+(v.currentTime/duration*100)+'%"></div>';
+  tl.innerHTML=segs+pend+cur
+}
+
+function setStatus(msg,type){const s=document.getElementById('status');s.textContent=msg;s.className='status'+(type?' '+type:'')}
+
+document.getElementById('markIn').onclick=markIn;
+document.getElementById('markOut').onclick=markOut;
+document.getElementById('undo').onclick=undo;
+document.getElementById('clear').onclick=clear;
+document.addEventListener('keydown',e=>{
+  if(e.target.tagName==='INPUT'||!currentFile)return;
+  if(e.key==='i'||e.key==='I')markIn();
+  if(e.key==='o'||e.key==='O')markOut();
+});
+
+function appendLog(line){
+  const box=document.getElementById('logbox');
+  box.classList.add('on');
+  const div=document.createElement('div');
+  if(line.startsWith('$ '))div.className='cmd';
+  div.textContent=line;
+  box.appendChild(div);
+  box.scrollTop=box.scrollHeight;
+}
+
+async function consumeSSE(response){
+  const reader=response.body.getReader();
+  const decoder=new TextDecoder('utf-8');
+  let buffer='';
+  while(true){
+    const {done,value}=await reader.read();
+    if(done)break;
+    buffer+=decoder.decode(value,{stream:true});
+    let idx;
+    while((idx=buffer.indexOf('\n\n'))>=0){
+      const frame=buffer.slice(0,idx);buffer=buffer.slice(idx+2);
+      const event=(frame.match(/^event: (.+)$/m)||[])[1];
+      const data=(frame.match(/^data: (.*)$/m)||[])[1];
+      if(!data)continue;
+      const obj=JSON.parse(data);
+      if(event==='log')appendLog(obj.line);
+      if(event==='done')return obj;
+    }
+  }
+  return null;
+}
+
+document.getElementById('run').onclick=()=>{
+  const btn=document.getElementById('run');
+  btn.disabled=true;setStatus('正在上传视频并无损剪切，请稍候…');
+  const box=document.getElementById('logbox');box.innerHTML='';box.classList.add('on');
+  fetch('/api/load',{method:'POST',headers:{'Content-Type':'application/octet-stream','X-Filename':encodeURIComponent(currentFile.name)},body:currentFile})
+    .then(r=>r.json())
+    .then(()=>fetch('/api/cut',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({cuts})}))
+    .then(consumeSSE)
+    .then(d=>{
+      if(!d){setStatus('处理失败：未收到结果','err');return}
+      const size=(d.size/1048576).toFixed(1);
+      if(d.audio_ok)setStatus('完成：'+d.file+'（'+size+' MB）已保存到当前目录，音轨完好','ok');
+      else setStatus('完成：'+d.file+'（'+size+' MB），但检测到音轨缺失，请检查源文件','err');
+    })
+    .catch(e=>{setStatus('处理失败：'+e,'err')})
+    .finally(()=>{btn.disabled=false});
+};
+
+render();
+</script>
+</body>
+</html>
