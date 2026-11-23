@@ -16,6 +16,3 @@ backup/
 *.avi
 *.flv
 *.wmv
-
-# 工作区数据
-.workbuddy/
